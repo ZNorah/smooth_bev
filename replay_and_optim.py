@@ -44,18 +44,6 @@ def filter_publish_bbox_infos(trackers:dict):
             print('========fill========', missing_tracker[-1]['info'].tracking_id)
     publish_bbox_infos += fill_bbox_infos
 
-    
-    truck_list = []
-    not_truck_list = []
-    for item in publish_bbox_infos:
-        if is_left_truck(item):
-            truck_list.append(item)
-        else:
-            not_truck_list.append(item)
-    new_truck_list, trackers = pair_publish_left_truck(truck_list, trackers)
-    publish_bbox_infos = new_truck_list + not_truck_list
-
-    publish_bbox_infos = protect_each_car(publish_bbox_infos)
     return publish_bbox_infos, trackers
 
 if __name__ == '__main__':

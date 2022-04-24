@@ -150,9 +150,6 @@ def is_burst_in_middle_view(tracker_infos:list, delay_n=1):
     middle_range = (18, 5)
     cate_index = tracker_infos[-1]['info'].cate_index
     tracking_id = tracker_infos[-1]['info'].tracking_id
-    # if tracking_id == 60:
-    #     for item in tracker_infos:
-    #         print(item)
     if cate_index > 3:
         return delay_n #ignore not car
     else:
@@ -174,87 +171,6 @@ def is_burst_in_middle_view(tracker_infos:list, delay_n=1):
 ### filter bev car ###
 
 ### smooth tracker ###
-def is_left_truck(tracker_info:BBox):
-    cate_index = tracker_info.cate_index
-    cate_flag = (cate_index == 2) #truck : 2-1=1 bus: 3-1=2
-    posy = tracker_info.pos_filter[1] #pos_y, wpixel
-    pos_flag = (posy > 0)
-    return cate_flag and pos_flag
-
-def pair_publish_left_truck(truck_trackers:list, trackers:dict):
-    left_front_tail_list = [] # left_x close to 0
-    left_rear_head_list = [] # right_c close to 512
-    pair_list = []
-    for truck in truck_trackers:
-        tracking_id = truck.tracking_id
-        coord = truck.uv_coord
-        left_x = coord[0]
-        right_x = left_x + coord[2]
-        pos_x = truck.pos_filter[0]
-        if pos_x > 0 and abs(left_x) < 5:
-            left_front_tail_list.append(truck)
-        if pos_x < 0 and abs(right_x - 512) < 10:
-            left_rear_head_list.append(truck)
-    if len(left_front_tail_list) and len(left_rear_head_list):
-        tail_pair_flag = [False] * len(left_front_tail_list)
-        head_pair_flag = [False] * len(left_rear_head_list)
-        for ii, tail in enumerate(left_front_tail_list):
-            for jj, head in enumerate(left_rear_head_list):
-                pos_y_tail = tail.pos_filter[1]
-                pos_y_head = head.pos_filter[1]
-                tail_top_y = tail.uv_coord[1]
-                tail_bot_y = tail_top_y + tail.uv_coord[3]
-                head_top_y = head.uv_coord[1]
-                head_bot_y = head_top_y + head.uv_coord[3]
-                pos_flag = (abs(pos_y_head - pos_y_tail) < 1.5)
-                ###can't handle pos_y diff is too big
-                # inside_flag = (tail_top_y > head_top_y) and (tail_bot_y < head_bot_y)
-                inside_flag = (tail_top_y > head_top_y)
-                if pos_flag and inside_flag and (not tail_pair_flag[ii]) and (not head_pair_flag[jj]):
-                    pair_list.append([{'id':tail.tracking_id, 'truck':tail}, {'id':head.tracking_id, 'truck':head}])
-                    tail_pair_flag[ii] = True
-                    head_pair_flag[jj] = True
-    all_pair_id_list = []
-    if len(pair_list):
-        for item in pair_list:
-            all_pair_id_list += [item[0]['id'], item[1]['id']]
-        not_pair_truck = []
-        for truck in truck_trackers:
-            tracking_id = truck.tracking_id
-            if tracking_id not in all_pair_id_list:
-                not_pair_truck.append(truck)
-        pair_truck = []
-        for pair in pair_list:
-            tail = pair[0]['truck']
-            head = pair[1]['truck']
-            #TODO: new_truck_length
-            new_truck_info = BBox(cate=head.cate, cate_index=head.cate_index, 
-                                        tracking_id=head.tracking_id, tracking_age=tail.tracking_age+1, 
-                                        uv_coord=head.uv_coord, pos_filter=head.pos_filter, 
-                                        obstacle_width=head.obstacle_width, obstacle_length=head.obstacle_length)
-            trackers[head.tracking_id][-1]['info'] = new_truck_info
-            trackers[head.tracking_id][-1]['focus_time'] = trackers[tail.tracking_id][-1]['focus_time'] + 1
-            trackers[head.tracking_id][-1]['missing_time'] = trackers[head.tracking_id][-1]['missing_time']
-            trackers[head.tracking_id][-1]['match_flag'] = False
-            trackers[head.tracking_id][-1]['fill_flag'] = trackers[head.tracking_id][-1]['fill_flag']
-            trackers[head.tracking_id][-1]['smooth_cate'] = -1
-
-            trackers[tail.tracking_id][-1]['info'] = tail
-            trackers[tail.tracking_id][-1]['focus_time'] = 0
-            trackers[tail.tracking_id][-1]['missing_time'] = trackers[tail.tracking_id][-1]['missing_time'] +1
-            trackers[tail.tracking_id][-1]['match_flag'] = False
-            trackers[tail.tracking_id][-1]['fill_flag'] = trackers[tail.tracking_id][-1]['fill_flag']
-            trackers[tail.tracking_id][-1]['smooth_cate'] = -1
-            pair_truck.append(new_truck_info)
-        new_truck_list = not_pair_truck+pair_truck
-        print('!!!!!!!')
-        print(all_pair_id_list)
-    else:
-        new_truck_list = truck_trackers
-    
-    return new_truck_list, trackers
-
-
 def bev_view_car_iou(bev1_info, bev2_info, bev_range_config=(60, 40), scale=0.1):
     position1 = bev1_info.pos_filter
     position2 = bev2_info.pos_filter
@@ -309,10 +225,6 @@ def fill_missing_car(tracker:list, publist_bbox_infos:list):
 
     cate = tracker[-1]['info'].cate_index
     tracking_id = tracker[-1]['info'].tracking_id
-    # if tracking_id == 69:
-    #     for item in tracker:
-    #         print(item)
-    #     print('-----69 in filling ----')
     tracking_age = tracker[-1]['info'].tracking_age #when miss, return to zero
     if cate > 3: # only for vehicle
         return tracker
