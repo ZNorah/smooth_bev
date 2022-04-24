@@ -31,9 +31,9 @@ def update_trackers(trackers:dict, fusion_bbox_infos, bev_range_config=(60, 40),
         elif tracking_id in trackers:
             track_info = deepcopy(trackers[tracking_id][-1])
             bbox_info_new = BBox(cate=bbox_info.cate, cate_index=bbox_info.cate_index, 
-                                        tracking_id=bbox_info.
-                                        tracking_id, tracking_age=track_info['info'].tracking_age+1, 
-                                        uv_coord=bbox_info.uv_coord, pos_filter=bbox_info.pos_filter)
+                                        tracking_id=bbox_info.tracking_id, tracking_age=track_info['info'].tracking_age+1, 
+                                        uv_coord=bbox_info.uv_coord, pos_filter=bbox_info.pos_filter, 
+                                        obstacle_width=bbox_info.obstacle_width, obstacle_length=bbox_info.obstacle_length)
             track_info["info"] = bbox_info_new
             if bbox_show_flag:
                 track_info["focus_time"] += 1
@@ -230,7 +230,8 @@ def pair_publish_left_truck(truck_trackers:list, trackers:dict):
             #TODO: new_truck_length
             new_truck_info = BBox(cate=head.cate, cate_index=head.cate_index, 
                                         tracking_id=head.tracking_id, tracking_age=tail.tracking_age+1, 
-                                        uv_coord=head.uv_coord, pos_filter=head.pos_filter)
+                                        uv_coord=head.uv_coord, pos_filter=head.pos_filter, 
+                                        obstacle_width=head.obstacle_width, obstacle_length=head.obstacle_length)
             trackers[head.tracking_id][-1]['info'] = new_truck_info
             trackers[head.tracking_id][-1]['focus_time'] = trackers[tail.tracking_id][-1]['focus_time'] + 1
             trackers[head.tracking_id][-1]['missing_time'] = trackers[head.tracking_id][-1]['missing_time']
@@ -344,7 +345,8 @@ def fill_missing_car(tracker:list, publist_bbox_infos:list):
                 new_position = [new_pos_x, new_pos_y]
                 new_bbox_info = BBox(cate=last_bbox_info.cate, cate_index=last_bbox_info.cate_index, 
                                         tracking_id=last_bbox_info.tracking_id, tracking_age=last_bbox_info.tracking_age+1, 
-                                        uv_coord=last_bbox_info.uv_coord, pos_filter=new_position)
+                                        uv_coord=last_bbox_info.uv_coord, pos_filter=new_position, 
+                                        obstacle_width=last_bbox_info.obstacle_width, obstacle_length=last_bbox_info.obstacle_length)
                 new_bbox_track['info'] = new_bbox_info
                 new_bbox_track['focus_time'] = tracker[-2]['focus_time'] + 1
                 new_bbox_track['missing_time'] = tracker[-1]['missing_time']
@@ -398,7 +400,8 @@ def vote_cate(tracker:list, vote_lenth=5):
         new_bbox_track = {}
         new_bbox_info = BBox(cate=new_cate, cate_index=max_cate, 
                             tracking_id=last_bbox_info.tracking_id, tracking_age=last_bbox_info.tracking_age, 
-                            uv_coord=last_bbox_info.uv_coord, pos_filter=last_bbox_info.pos_filter)
+                            uv_coord=last_bbox_info.uv_coord, pos_filter=last_bbox_info.pos_filter,
+                            obstacle_width=last_bbox_info.obstacle_width, obstacle_length=last_bbox_info.obstacle_length)
         new_bbox_track['info'] = new_bbox_info
         new_bbox_track['focus_time'] = tracker[-1]['focus_time']
         new_bbox_track['missing_time'] = tracker[-1]['missing_time']
@@ -454,7 +457,8 @@ def protect_ego_car(bbox_info):
 
     new_bbox_info = BBox(cate=bbox_info.cate, cate_index=bbox_info.cate_index, 
                         tracking_id=bbox_info.tracking_id, tracking_age=bbox_info.tracking_age, 
-                        uv_coord=bbox_info.uv_coord, pos_filter=new_pos_filter)
+                        uv_coord=bbox_info.uv_coord, pos_filter=new_pos_filter, 
+                        obstacle_width=bbox_info.obstacle_width, obstacle_length=bbox_info.obstacle_length)
     return new_bbox_info
 
 def sort_by_dist(bbox_infos):
@@ -509,7 +513,8 @@ def finetune_two_bev(bbox1_info, bbox2_info):
     new_pos_filter = [new_dx, new_dy]
     new_bbox2_info = BBox(cate=bbox2_info.cate, cate_index=bbox2_info.cate_index, 
                         tracking_id=bbox2_info.tracking_id, tracking_age=bbox2_info.tracking_age, 
-                        uv_coord=bbox2_info.uv_coord, pos_filter=new_pos_filter)
+                        uv_coord=bbox2_info.uv_coord, pos_filter=new_pos_filter,
+                        obstacle_width=bbox2_info.obstacle_width, obstacle_length=bbox2_info.obstacle_length)
     return new_bbox2_info
 
 def protect_each_car(bbox_infos:list):

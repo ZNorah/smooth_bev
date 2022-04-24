@@ -7,7 +7,6 @@ from copy import deepcopy
 
 from replay_utils import *
 from optim_utils import *
-import pdb
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Replay or optimization detection result for SQ')
@@ -69,14 +68,14 @@ if __name__ == '__main__':
     file_index = args.start
 
     left_front_imgdir = osp.join(resroot, 'left_front')
-    left_front_jsondir = osp.join(resroot, 'image_record_ori3', 'image_record_json', 'left_front')
+    left_front_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'left_front')
     left_rear_imgdir = osp.join(resroot, 'left_rear')
-    left_rear_jsondir = osp.join(resroot, 'image_record_ori3', 'image_record_json', 'left_rear')
+    left_rear_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'left_rear')
     right_front_imgdir = osp.join(resroot, 'right_front')
-    right_front_jsondir = osp.join(resroot, 'image_record_ori3', 'image_record_json', 'right_front')
+    right_front_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'right_front')
     right_rear_imgdir = osp.join(resroot, 'right_rear')
-    right_rear_jsondir = osp.join(resroot, 'image_record_ori3', 'image_record_json', 'right_rear')
-    fusion_jsondir = osp.join(resroot, 'image_record_ori3', 'image_record_json', 'fusion')
+    right_rear_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'right_rear')
+    fusion_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'fusion')
     namelist = list(os.listdir(left_front_imgdir))
     namelist.sort(key=sort_rule)
 
