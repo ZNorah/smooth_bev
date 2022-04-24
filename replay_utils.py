@@ -11,7 +11,7 @@ from collections import namedtuple
 
 BBox = namedtuple('BBox', ['cate', 'cate_index', 
                             'tracking_id', 'tracking_age', 
-                            'uv_coord', 'pos_filter'])
+                            'uv_coord', 'pos_filter', 'obstacle_width', 'obstacle_length'])
 
 def gendir(path):
     if not osp.exists(path):
@@ -75,9 +75,12 @@ def parse_track_info(obj):
     pos_x = pos_filter['obstacle_pos_x_filter']
     pos_y = pos_filter['obstacle_pos_y_filter']
     position = [pos_x, pos_y]
+    obstacle_width = obj['obstacle_width']
+    obstacle_length = obj['obstacle_length']
     bbox_info = BBox(cate=cate_name, cate_index=cate_index, 
                         tracking_id=obj_id, tracking_age=obj_age, 
-                        uv_coord=uvcoord, pos_filter=position)
+                        uv_coord=uvcoord, pos_filter=position, 
+                        obstacle_width=obstacle_width, obstacle_length=obstacle_length)
     return bbox_info
 
 def process_image_info(imgdir, jsondir, filename, crop_config):
