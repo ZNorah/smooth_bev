@@ -80,7 +80,7 @@ if __name__ == '__main__':
     namelist.sort(key=sort_rule)
 
     crop_config = (0, 0, 200, 120) # desay_corp_top, desay_crop_bottom, nm_crop_top, nm_crop_bottom
-    bev_range_config=(60, 40) # h, w
+    bev_range_config=(80, 40) # h, w
     ego_car_size=(20, 40) # w, h
     bev_car_size=(20, 50) # w, h
     scale=0.1 #meter to pixel, 1m = 10pix
@@ -108,15 +108,15 @@ if __name__ == '__main__':
             left_rear_img = draw_one_track_bbox(left_rear_img, left_rear_bbox_infos, 'left_rear', imgid, dst_tracking_id_list)
             right_front_img = draw_one_track_bbox(right_front_img, right_front_bbox_infos, 'right_front', imgid, dst_tracking_id_list, True)
             right_rear_img = draw_one_track_bbox(right_rear_img, right_rear_bbox_infos, 'right_rear', imgid, dst_tracking_id_list)
-            bev_img = draw_one_track_bev(fusion_bbox_infos, dst_tracking_id_list, bev_range_config, ego_car_size, bev_car_size, scale)
-            filter_bev_img = draw_one_track_bev(publish_bbox_infos, dst_tracking_id_list, bev_range_config, ego_car_size, bev_car_size, scale)
+            bev_img = draw_one_track_bev(fusion_bbox_infos, dst_tracking_id_list, bev_range_config, ego_car_size, scale)
+            filter_bev_img = draw_one_track_bev(publish_bbox_infos, dst_tracking_id_list, bev_range_config, ego_car_size, scale)
         else: #all
             left_front_img = draw_all_bbox_per_img(left_front_img, left_front_bbox_infos, 'left_front', imgid)
             left_rear_img = draw_all_bbox_per_img(left_rear_img, left_rear_bbox_infos, 'left_rear', imgid)
             right_front_img = draw_all_bbox_per_img(right_front_img, right_front_bbox_infos, 'right_front', imgid, True)
             lright_rear_img = draw_all_bbox_per_img(right_rear_img, right_rear_bbox_infos, 'right_rear', imgid)
-            bev_img = draw_all_bev(fusion_bbox_infos, bev_range_config, ego_car_size, bev_car_size, scale)
-            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, bev_car_size, scale)
+            bev_img = draw_all_bev(fusion_bbox_infos, bev_range_config, ego_car_size, scale)
+            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale)
 
         left_img_draw = cv2.vconcat([left_front_img, left_rear_img])
         right_img_draw = cv2.vconcat([right_front_img, right_rear_img])

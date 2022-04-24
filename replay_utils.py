@@ -1,4 +1,5 @@
 import pdb
+from turtle import left
 import numpy as np
 import os
 import os.path as osp
@@ -183,7 +184,7 @@ def draw_one_track_bbox(img, bbox_infos, camera_position, frame_id, dst_tracking
 
     return img
 
-def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), bev_car_size=(20, 50), scale=0.1):
+def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), scale=0.1):
     color_list = gen_color_list()
     font = cv2.FONT_HERSHEY_SIMPLEX
     bev_img_h = int(bev_range_config[0] / scale)
@@ -205,9 +206,10 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), b
     bev_img[int(bev_img_h/2):int(bev_img_h/2+ego_car_size[1]), int(bev_img_w/2-ego_car_size[0]/2):int(bev_img_w/2+ego_car_size[0]/2)] = eog_img
     for bbox_info in bbox_infos:
         position = bbox_info.pos_filter
-        bev_box_w, bev_box_l = bev_car_size # 20, 50, flexiable
-        bev_cent_u = (-position[1]+bev_range_config[1]/2) / 0.1
-        bev_cent_v = (bev_range_config[0]/2 - position[0]) / 0.1
+        bev_box_l = bbox_info.obstacle_length / scale
+        bev_box_w = bbox_info.obstacle_width / scale
+        bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
+        bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
         cate_index = bbox_info.cate_index
         tracking_id = bbox_info.tracking_id
         bbox_msg = '%d| %.2f, %.2f' % (tracking_id, position[1], position[0]) #dy, dx
@@ -215,12 +217,22 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), b
         fontScale = 0.4
         if cate_index > 3: # not car, =model_cate_num+1
             color = (0, 255, 255)
-            radiu = 5
+            left_x = int(bev_cent_u - 5)
+            right_x = int(bev_cent_u + 5)
+            left_y = int(bev_cent_v - 5)
+            right_y = int(bev_cent_v + 5)
         else:
             color = color_list[cate_index]
-            radiu = 10
+            left_x = int(bev_cent_u - bev_box_w / 2)
+            right_x = int(bev_cent_u + bev_box_w / 2)
+            left_y = int(bev_cent_v - bev_box_l / 2)
+            right_y = int(bev_cent_v + bev_box_l / 2)
         if (0<bev_cent_u<bev_img_w and 0<bev_cent_v<bev_img_h):
-            cv2.circle(bev_img, (int(bev_cent_u), int(bev_cent_v)), radiu, color, -1)
+            cv2.rectangle(bev_img, (left_x, left_y), (right_x, right_y), color, -1)
+            cv2.line(bev_img, (left_x, left_y), (left_x, right_y), (255,255,255), 1)
+            cv2.line(bev_img, (left_x, right_y), (right_x, right_y), (255,255,255), 1)
+            cv2.line(bev_img, (right_x, right_y), (right_x, left_y), (255,255,255), 1)
+            cv2.line(bev_img, (right_x, left_y), (left_x, left_y), (255,255,255), 1)
             if bev_cent_u > bev_img_w/2:
                 bev_show_x = int(bev_cent_u-bev_box_w/2)
             else:
@@ -230,10 +242,10 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), b
             else:
                 bev_show_y = int(bev_cent_v+bev_box_l/2)
             cv2.putText(bev_img, bbox_msg, (bev_show_x, bev_show_y), font, fontScale, (255,255,255), thickness=bbox_thick, lineType=cv2.LINE_AA)
-    bev_img = cv2.resize(bev_img, (341, 512)) # (400,600) -> (xxx, 512)
+    bev_img = cv2.resize(bev_img, (int(512*bev_img_w/bev_img_h), 512)) # (400,600) -> (xxx, 512) / (400,800) ->(xxx,512)
     return bev_img
 
-def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40), ego_car_size=(20, 40), bev_car_size=(20, 50), scale=0.1):
+def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40), ego_car_size=(20, 40), scale=0.1):
     color_list = gen_color_list()
     font = cv2.FONT_HERSHEY_SIMPLEX
     bev_img_h = int(bev_range_config[0] / scale)
@@ -258,7 +270,10 @@ def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40
         if tracking_id not in dst_tracking_id:
             continue
         position = bbox_info.pos_filter
-        bev_box_w, bev_box_l = bev_car_size # 20, 50, flexiable
+        bev_box_l = bbox_info.obstacle_length / scale
+        bev_box_w = bbox_info.obstacle_width / scale
+        bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
+        bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
         bev_cent_u = (-position[1]+bev_range_config[1]/2) / 0.1
         bev_cent_v = (bev_range_config[0]/2 - position[0]) / 0.1
         cate_index = bbox_info.cate_index
@@ -267,12 +282,22 @@ def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40
         fontScale = 0.4
         if cate_index > 3:
             color = (0, 255, 255)
-            radiu = 5
+            left_x = int(bev_cent_u - 5)
+            right_x = int(bev_cent_u + 5)
+            left_y = int(bev_cent_v - 5)
+            right_y = int(bev_cent_v + 5)
         else:
             color = color_list[cate_index]
-            radiu = 10
+            left_x = int(bev_cent_u - bev_box_w / 2)
+            right_x = int(bev_cent_u + bev_box_w / 2)
+            left_y = int(bev_cent_v - bev_box_l / 2)
+            right_y = int(bev_cent_v + bev_box_l / 2)
         if (0<bev_cent_u<bev_img_w and 0<bev_cent_v<bev_img_h):
-            cv2.circle(bev_img, (int(bev_cent_u), int(bev_cent_v)), radiu, color, -1)
+            cv2.rectangle(bev_img, (left_x, left_y), (right_x, right_y), color, -1)
+            cv2.line(bev_img, (left_x, left_y), (left_x, right_y), (255,255,255), 1)
+            cv2.line(bev_img, (left_x, right_y), (right_x, right_y), (255,255,255), 1)
+            cv2.line(bev_img, (right_x, right_y), (right_x, left_y), (255,255,255), 1)
+            cv2.line(bev_img, (right_x, left_y), (left_x, left_y), (255,255,255), 1)
             if bev_cent_u > bev_img_w/2:
                 bev_show_x = int(bev_cent_u-bev_box_w/2)
             else:
@@ -282,7 +307,7 @@ def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40
             else:
                 bev_show_y = int(bev_cent_v+bev_box_l/2)
             cv2.putText(bev_img, bbox_msg, (bev_show_x, bev_show_y), font, fontScale, (255,255,255), thickness=bbox_thick, lineType=cv2.LINE_AA)
-    bev_img = cv2.resize(bev_img, (341, 512)) # (400,600) -> (xxx, 512)
+    bev_img = cv2.resize(bev_img, (int(512*bev_img_w/bev_img_h), 512)) # (400,600) -> (xxx, 512) / (400,800) ->(xxx,512)
     return bev_img
 
 ##### draw infomation functions ####
