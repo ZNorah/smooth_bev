@@ -21,18 +21,40 @@ def parse_args():
 def sort_rule(name):
     return int(name.split('.')[0])
 
-def filter_publish_bbox_infos(trackers:dict):
+def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     publish_bbox_infos = []
     miss_tracker_infos = []
+    miss_ped_tracker_infos = []
 
     # actually publish bev
     for tracking_id, tracker_infos in trackers.items():
         tracker_infos = vote_cate(tracker_infos)
+        tracker_infos = smooth_bev_size(tracker_infos)
         if delay_n_filter(tracker_infos):
             publish_bbox_info = tracker_infos[-1]['info']
             publish_bbox_infos.append(publish_bbox_info)
         else:
             miss_tracker_infos.append(tracker_infos)
+            if tracker_infos[-1]['info'].cate_index > 3 and is_ped_smooth(tracker_infos[-1]['info']): # not car, ped
+                miss_ped_tracker_infos.append(tracker_infos)
+
+    # link some id swith pedestrian and so on
+    link_bbox_infos = []
+    link_bbox_ids = []
+    link_to_publish_ped_infos = link_missing_ped(miss_ped_tracker_infos)
+    for link_ped in link_to_publish_ped_infos:
+        tracking_id = link_ped[-1]['info'].tracking_id
+        trackers[tracking_id] = link_ped
+        link_bbox_infos.append(link_ped[-1]['info'])
+        link_bbox_ids.append(tracking_id)
+    for item in miss_ped_tracker_infos:
+        tracking_id = item[-1]['info'].tracking_id
+        if tracking_id not in link_bbox_ids:
+            last_ped_info = item[-1]
+            if item[-1]['link_flag'] and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 1 and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
+                # id switch too fast, link 1 frame than swicth again
+                link_bbox_infos.append(last_ped_info['info'])
+    publish_bbox_infos += link_bbox_infos
 
     # fill some strong exist but missing bev
     fill_bbox_infos = []
@@ -45,17 +67,17 @@ def filter_publish_bbox_infos(trackers:dict):
     publish_bbox_infos += fill_bbox_infos
 
     
-    truck_list = []
-    not_truck_list = []
-    for item in publish_bbox_infos:
-        if is_left_truck(item):
-            truck_list.append(item)
-        else:
-            not_truck_list.append(item)
-    new_truck_list, trackers = pair_publish_left_truck(truck_list, trackers)
-    publish_bbox_infos = new_truck_list + not_truck_list
+    # truck_list = []
+    # not_truck_list = []
+    # for item in publish_bbox_infos:
+    #     if is_left_truck(item):
+    #         truck_list.append(item)
+    #     else:
+    #         not_truck_list.append(item)
+    # new_truck_list, trackers = pair_publish_left_truck(truck_list, trackers)
+    # publish_bbox_infos = new_truck_list + not_truck_list
 
-    publish_bbox_infos = protect_each_car(publish_bbox_infos)
+    publish_bbox_infos = protect_each_car(publish_bbox_infos, bev_range_config)
     return publish_bbox_infos, trackers
 
 if __name__ == '__main__':
@@ -101,7 +123,7 @@ if __name__ == '__main__':
 
         ####keep trackers map
         trackers = update_trackers(trackers, fusion_bbox_infos, bev_range_config, scale)
-        publish_bbox_infos, trackers = filter_publish_bbox_infos(trackers)
+        publish_bbox_infos, trackers = filter_publish_bbox_infos(trackers, bev_range_config)
 
         if len(dst_tracking_id_list):
             left_front_img = draw_one_track_bbox(left_front_img, left_front_bbox_infos, 'left_front', imgid, dst_tracking_id_list)
