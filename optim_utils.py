@@ -491,7 +491,7 @@ def protect_ego_car(bbox_info, bev_range_config):
     if bbox_info.cate_index > 3:
         bev_box_w = 10; bev_box_l = 10
     else:
-        bev_box_w = bbox_info.obstacle_width; bev_box_l = bbox_info.obstacle_length # flexible
+        bev_box_w = bbox_info.obstacle_width / scale; bev_box_l = bbox_info.obstacle_length / scale # flexible
     bev_cent_u = (-position[1]+bev_range_w/2) / scale; bev_cent_v = (bev_range_h/2 - position[0]) / scale
 
     ego_left_x = bev_w/2 - ego_w/2; ego_right_x = bev_w/2 + ego_w/2
@@ -539,7 +539,7 @@ def sort_by_distarrond(bbox_infos):
     return min(abs(bbox_infos.pos_filter[0]), abs(bbox_infos.pos_filter[1]))
 
 def sort_by_radiu(bbox_infos):
-    return bbox_infos.pos_filter[0]*bbox_infos.pos_filter[0] +bbox_infos.pos_filter[1]*bbox_infos.pos_filter[1]
+    return 1/bbox_infos.obstacle_length*bbox_infos.pos_filter[0]*bbox_infos.pos_filter[0] +bbox_infos.pos_filter[1]*bbox_infos.pos_filter[1]
 
 def finetune_two_bev(bbox1_info, bbox2_info, bev_range_config): # 'x' / 'y'
     #1. just move TODO: move strategy
@@ -570,7 +570,7 @@ def finetune_two_bev(bbox1_info, bbox2_info, bev_range_config): # 'x' / 'y'
     dw_pixel = 0; dh_pixel = 0; protect_pixel_w = 5; protect_pixel_h = 5
     if diff_u < diff_v: # move to right / left
         if (bev1_left_x <= bev2_right_x <= bev1_right_x) and (bev1_left_x <= bev2_left_x <= bev1_right_x):
-            if abs(bbox1_info.pos_filter[1]) > abs(bbox2_info.pos_filter[1]):
+            if abs(bbox1_info.pos_filter[1]) > abs(bbox2_info.pos_filter[1]): #？what
                 dw_pixel = bev1_right_x - bev2_left_x + protect_pixel_w
                 print('===== move %d to right' % bbox2_info.tracking_id)
             else:

@@ -2,8 +2,6 @@ import os
 import os.path as osp
 import cv2
 import argparse
-# from collections import namedtuple
-from copy import deepcopy
 
 from replay_utils import *
 from optim_utils import *
@@ -34,9 +32,10 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
             publish_bbox_info = tracker_infos[-1]['info']
             publish_bbox_infos.append(publish_bbox_info)
         else:
-            miss_tracker_infos.append(tracker_infos)
             if tracker_infos[-1]['info'].cate_index > 3 and is_ped_smooth(tracker_infos[-1]['info']): # not car, ped
                 miss_ped_tracker_infos.append(tracker_infos)
+            else:
+                miss_tracker_infos.append(tracker_infos)
 
     # link some id swith pedestrian and so on
     link_bbox_infos = []
@@ -98,13 +97,13 @@ if __name__ == '__main__':
     right_rear_imgdir = osp.join(resroot, 'right_rear')
     right_rear_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'right_rear')
     fusion_jsondir = osp.join(resroot, 'image_record', 'image_record_json', 'fusion')
+    # pdb.set_trace()
     namelist = list(os.listdir(left_front_imgdir))
     namelist.sort(key=sort_rule)
 
-    crop_config = (0, 0, 200, 120) # desay_corp_top, desay_crop_bottom, nm_crop_top, nm_crop_bottom
-    bev_range_config=(80, 40) # h, w
+    crop_config = (0, 200, 120, 0) # desay_corp_top, desay_crop_bottom, nm_crop_top, nm_crop_bottom
+    bev_range_config=(100, 40) # h, w
     ego_car_size=(20, 40) # w, h
-    bev_car_size=(20, 50) # w, h
     scale=0.1 #meter to pixel, 1m = 10pix
 
     cv2.namedWindow('Replay')
