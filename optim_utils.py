@@ -3,13 +3,21 @@ from replay_utils import *
 
 ### update view trackers ###
 def is_box_show(bbox_info, bev_range_config=(60, 40), scale=0.1):
+    show_flag = True
     position = bbox_info.pos_filter
     bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
     bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
     if (0<bev_cent_u<bev_range_config[1]/scale and 0<bev_cent_v<bev_range_config[0]/scale):
-        return True
+        show_flag = True
     else:
-        return False
+        show_flag = False
+    ahead_range = 1.9
+    dis_h, dis_w = position #[dx, dy]
+    if dis_h > 0:
+        if abs(dis_w) < ahead_range/2:
+            show_flag = False
+            print('!!TOO ahead')
+    return show_flag
 
 def is_ped_smooth(bbox_info):
     scale = 0.1
@@ -30,9 +38,12 @@ def update_trackers(trackers:dict, fusion_bbox_infos, bev_range_config=(60, 40),
         tracking_id = bbox_info.tracking_id
 
         if tracking_id not in trackers: # id first time appearance
-            # TODO: 是否是大车id跳变导致的？是否需要修复id进行显示？否则会突然消失？还是将id跳变的tracker继承？
+            # TODO: 是否是大车id跳变导致的？是否需要修复id进行显示？否则会突然消失？还是将id跳变的tracker继承？ 前方已经做了这件事？
             # init tracker info
-            track_info = {"info": bbox_info, "focus_time":1, "missing_time":0, "match_flag":True, "fill_flag":False, "smooth_cate": -1, "link_flag":False}
+            track_info = {"info": bbox_info, "focus_time":1, 
+                          "missing_time":0, "match_flag":True, 
+                          "fill_flag":False, "smooth_cate": -1, 
+                          "link_flag":False}# "inhreit_id": -22}
             if not bbox_show_flag:
                 track_info['focus_time'] = 0
                 track_info['match_flag'] = False
@@ -45,27 +56,69 @@ def update_trackers(trackers:dict, fusion_bbox_infos, bev_range_config=(60, 40),
                                         uv_coord=bbox_info.uv_coord, pos_filter=bbox_info.pos_filter, 
                                         obstacle_width=bbox_info.obstacle_width, obstacle_length=bbox_info.obstacle_length)
             track_info["info"] = bbox_info_new
+            track_info['fill_flag'] = False
+            track_info['smooth_cate'] = -1
+            track_info['link_flag'] = False
             if bbox_show_flag:
                 track_info["focus_time"] += 1
                 track_info["match_flag"] = True
             else:
                 track_info["focus_time"] = 0
-                track_info['match_flag'] = False
+                track_info['match_flag'] = False # detected but not show
             trackers[tracking_id].append(track_info)
             if len(trackers[tracking_id]) > max_length_:
                 del trackers[tracking_id][0]
+    # for tracking_id, track_info in trackers.items():
+    #     last_all_info = track_info[-1]
+    #     if (len(track_info) == 1 and track_info[-1]['info'].tracking_age > 0):
+    #         last_type = last_all_info['info'].cate_index
+    #         last_age = last_all_info['info'].tracking_age
+    #         last_lr = last_all_info['info'].pos_filter[1]
+    #         for tid, tinfo in trackers.items():
+    #             if tid != tracking_id:
+    #                 if len(tinfo) > 1:
+    #                     ctype = tinfo[-1]['info'].cate_index
+    #                     cage = tinfo[-1]['info'].tracking_age
+    #                     clr = tinfo[-1]['info'].pos_filter[1]
+    #                     if (clr * last_lr > 0) and last_age == cage and last_type == ctype:
+    #                         trackers[tracking_id][-1]['inhreit_id'] = tid
+    #                         print(' %d is inherited from %d' % (tracking_id, tid))
     del_list = []
     for tracking_id, track_info in trackers.items():
-        if not track_info[-1]['match_flag']: #not the first appearence or not show in this frame
+        if not track_info[-1]['match_flag']: #not det or det but not show in this frame, if not det, age not +1
             trackers[tracking_id][-1]['missing_time'] += 1
             trackers[tracking_id][-1]['focus_time'] = 0
+            # for bbox in fusion_bbox_infos:
+            #     tid = bbox.tracking_id
+            #     tage = bbox.tracking_age
+            #     if len(track_info) > 4:
+            #         if tage > 4 and  len(trackers[tid]) < 5 and tage == (trackers[tracking_id][-1]['info'].tracking_age + 1) and trackers[tid][-1]['focus_time'] < trackers[tracking_id][-2]['focus_time']:
+            #             del_list.append(tracking_id)
+            #             print("!!!!!  %d inherit %d !!!!" % (tid, tracking_id))
+            #             trackers[tid][-1]['focus_time'] = trackers[tracking_id][-2]['focus_time'] + 1
+            #             #可能同时出现，后面被继承的一方消失
+
         else:
             trackers[tracking_id][-1]['match_flag'] = False 
             trackers[tracking_id][-1]['missing_time'] = 0
         if trackers[tracking_id][-1]['missing_time'] > vanish_length_:
             del_list.append(tracking_id)
     for tracking_id in del_list:
-        del trackers[tracking_id]
+        if tracking_id in trackers:
+            del trackers[tracking_id]
+    # for tracking_id, track_info in trackers.items():
+    #     if tracking_id == 18:
+    #         print('---')
+    #         for item in trackers[tracking_id]:
+    #             print(item)
+    #     if tracking_id == 24:
+    #         print('---')
+    #         for item in trackers[tracking_id]:
+    #             print(item)
+    #     if tracking_id == 12:
+    #         print('---')
+    #         for item in trackers[tracking_id]:
+    #             print(item)
     return trackers
 ### update view trackers ###
 
@@ -77,7 +130,7 @@ def delay_n_filter(tracker_infos:list):
     delay_n = 1
     if tracker_infos[-1]['info'].cate_index > 3: # not car, delay more
         delay_n += 1
-    if tracker_infos[-1]['info'].pos_filter[1] > 12:
+    if tracker_infos[-1]['info'].pos_filter[1] > 12: # 
         delay_n += 1
     middle_range = (15, 5) # h:15m, w:5m
 
@@ -87,8 +140,9 @@ def delay_n_filter(tracker_infos:list):
 
     #TODO: more condition
     # too big bbox suddenly appear
-    if last_tracker_info['info'].uv_coord[2] * last_tracker_info['info'].uv_coord[3] > 0.6*512*216:
-        delay_n -= 1
+    # if last_tracker_info['info'].uv_coord[2] * last_tracker_info['info'].uv_coord[3] > 0.6*512*216:
+    #     delay_n -= 1
+    
     # ped delay_n +=1
     if last_tracker_info['info'].cate_index > 3:
         delay_n += 1
@@ -113,9 +167,22 @@ def delay_n_filter(tracker_infos:list):
             else:
                 publish_flag = True
 
+    if publish_flag:
+        small_delay_n = is_not_middle_and_small(tracker_infos, burst_delay_n)
+        if small_delay_n > burst_delay_n:
+            # pdb.set_trace()
+            if last_tracker_info['focus_time'] < (1+small_delay_n):
+                publish_flag = False
+            elif last_tracker_info['missing_time'] > 0:
+                publish_flag = False
+            else:
+                publish_flag = True
+    else:
+        small_delay_n = burst_delay_n
+
     # 3.the more time flicker, the more frame delay
     if publish_flag:
-        flicker_delay_n = is_flicker(tracker_infos, burst_delay_n, middle_range)
+        flicker_delay_n = is_flicker(tracker_infos, small_delay_n, middle_range)
         if flicker_delay_n != delay_n:
             print('tid: ', tracking_id, 'delay more: ', flicker_delay_n)
             if last_tracker_info['focus_time'] < (1+flicker_delay_n):
@@ -125,7 +192,7 @@ def delay_n_filter(tracker_infos:list):
             else:
                 publish_flag = True
     else:
-        flicker_delay_n = burst_delay_n
+        flicker_delay_n = small_delay_n
         if last_tracker_info['focus_time'] < (1+flicker_delay_n):
             publish_flag = False
         elif last_tracker_info['missing_time'] > 0:
@@ -178,7 +245,7 @@ def is_burst_in_middle_view(tracker_infos:list, delay_n=1):
         coord = tracker_infos[-1]['info'].uv_coord
         leftx = coord[0]
         right_x = leftx + coord[2]
-        if abs(pos_h) < middle_range[0]: #h inside 15m
+        if abs(pos_h) < middle_range[0]: #h inside 18m
             if tracker_infos[-1]['focus_time'] > (delay_n+2) or abs(pos_w) < middle_range[1]:#or coord[2]*coord[3] >= size_range 
                 return burst_delay_n #apperence more than delay_n, or too close to left/right side
             elif abs(right_x - 512) < 10:
@@ -189,6 +256,38 @@ def is_burst_in_middle_view(tracker_infos:list, delay_n=1):
                 return burst_delay_n #else is suddenly appearence
         else:
             return burst_delay_n
+
+def is_not_middle_and_small(tracker_infos:list, delay_n=1):
+    #only for vehical
+    middle_range = (20, 5)
+    cate_index = tracker_infos[-1]['info'].cate_index
+    tracking_id = tracker_infos[-1]['info'].tracking_id
+    if cate_index > 3:
+        return delay_n #ignore not car
+    else:
+        tid = tracker_infos[-1]['info'].tracking_id
+        # if tid == 42:
+        #     pdb.set_trace()
+        small_delay_n = delay_n
+        pos_h, pos_w = tracker_infos[-1]['info'].pos_filter #pos_x ->zongxiang  pos_y->hengxiang
+        coord = tracker_infos[-1]['info'].uv_coord
+        leftx = coord[0]
+        right_x = leftx + coord[2]
+        width, height = coord[2:]
+        if abs(pos_h) > middle_range[0] and pos_h < 0 and width * height < (50*50): #h outside 20m
+            if tracker_infos[-1]['focus_time'] > (delay_n+2):
+                return small_delay_n #apperence more than delay_n
+            elif len(tracker_infos) < 6: #边缘突然出现
+                print('tid:', tracking_id, 'far and bbox not big!')
+                if (height / width) > 2 and (abs(leftx) < 10 or abs(right_x - 512) < 10):
+                    small_delay_n += 2
+                else:
+                    small_delay_n += 1
+                return small_delay_n #else is suddenly appearence
+            else:
+                return small_delay_n
+        else:
+            return small_delay_n
 
 ### filter bev car ###
 
@@ -311,6 +410,18 @@ def bev_view_car_iou(bev1_info, bev2_info, bev_range_config=(60, 40), scale=0.1)
     inter_area = inter_w * inter_h
     union_area = bev1_box_area + bev2_box_area - inter_area
     iou = inter_area / union_area
+
+    if bev1_info.tracking_id == 3:
+        print(bev1_info)
+        print('w, h, top_y, bot_y, left_x, right_x')
+        print(bev1_box_w, bev1_box_l, bev1_top_y, bev1_bot_y, bev1_left_x, bev1_right_x)
+        print('----')
+        print(bev2_info)
+        print('w, h, top_y, bot_y, left_x, right_x')
+        print(bev2_box_w, bev2_box_l, bev2_top_y, bev2_bot_y, bev2_left_x, bev2_right_x)
+        print('-----')
+        print(iou)
+
     return iou
 
 def is_overlap_with_other_id(bbox_info, publish_bbox_infos:list, iou_thre=0.8, bev_range_config=(60, 40), scale=0.1):
@@ -323,9 +434,9 @@ def is_overlap_with_other_id(bbox_info, publish_bbox_infos:list, iou_thre=0.8, b
 
 def fill_missing_car(tracker:list, publist_bbox_infos:list):
     max_length_ = 8
-    max_missing_num = int(max_length_ / 3)
-    iou_thre = 0.7
-    fill_range=(15, 12)
+    max_missing_num = int(max_length_ / 2)
+    iou_thre = 0.4#0.7
+    fill_range=(20, 12)
     fill_flag = False
 
     cate = tracker[-1]['info'].cate_index
@@ -339,27 +450,34 @@ def fill_missing_car(tracker:list, publist_bbox_infos:list):
     max_focus_time = max(focus_time_list)
     if tracker[-1]['info'].uv_coord[2] > 512/2: #w > 256
         max_length_ = 6 ###test for id69
-    if (tracking_age>=max_length_) and (max_focus_time >= max_length_) and (tracker[-1]['missing_time'] < max_missing_num):
+    # if tracking_id == 192:
+    #     pdb.set_trace()
+    if (tracking_age>=max_length_) and (max_focus_time >= max_length_) and (0< tracker[-1]['missing_time'] < max_missing_num):
         last_bbox_info = tracker[-1]['info']
         position = last_bbox_info.pos_filter #pos_x zongxinag , pos_y hengxiang
         if abs(position[0]) < fill_range[0] and abs(position[1]) < fill_range[1]: #fill range
-            overlap_id = is_overlap_with_other_id(last_bbox_info, publist_bbox_infos, iou_thre)
+            position_last = tracker[-2]['info'].pos_filter
+            new_pos_x = position[0] + (position[0] - position_last[0]) / tracker[-1]['missing_time']
+            new_pos_y = position[1] + (position[1] - position_last[1]) / tracker[-1]['missing_time']
+            new_position = [new_pos_x, new_pos_y]
+            new_last_bbox_info = BBox(cate=last_bbox_info.cate, cate_index=last_bbox_info.cate_index, 
+                                        tracking_id=last_bbox_info.tracking_id, tracking_age=last_bbox_info.tracking_age, 
+                                        uv_coord=last_bbox_info.uv_coord, pos_filter=new_position, 
+                                        obstacle_width=last_bbox_info.obstacle_width, obstacle_length=last_bbox_info.obstacle_length)
+            # if tracking_id == 3:
+            #     pdb.set_trace()
+            overlap_id = is_overlap_with_other_id(new_last_bbox_info, publist_bbox_infos, iou_thre)
             if overlap_id > 0: #overlap / id switch or occlusion
                 #TODO: add id switch method / update or tracker or other method
                 pass
             else:
                 fill_flag = True
                 new_bbox_track = {}
-                coord_w_last = tracker[-2]['info'].uv_coord[2]
-                coord_w = tracker[-1]['info'].uv_coord[2]
-                new_coord_w = coord_w + (coord_w - coord_w_last) /2 
-                if new_coord_w / coord_w_last < 0.3:
-                    fill_flag = False
-                # print(tracking_id, coord_w_last, coord_w)
-                position_last = tracker[-2]['info'].pos_filter
-                new_pos_x = position[0] + (position[0] - position_last[0])/2
-                new_pos_y = position[1] + (position[1] - position_last[1])/2
-                new_position = [new_pos_x, new_pos_y]
+                # coord_w_last = tracker[-2]['info'].uv_coord[2]  # ???
+                # coord_w = tracker[-1]['info'].uv_coord[2]
+                # new_coord_w = coord_w + (coord_w - coord_w_last) /2 
+                # if new_coord_w / coord_w_last < 0.3:
+                #     fill_flag = False
                 new_bbox_info = BBox(cate=last_bbox_info.cate, cate_index=last_bbox_info.cate_index, 
                                         tracking_id=last_bbox_info.tracking_id, tracking_age=last_bbox_info.tracking_age+1, 
                                         uv_coord=last_bbox_info.uv_coord, pos_filter=new_position, 
@@ -375,6 +493,8 @@ def fill_missing_car(tracker:list, publist_bbox_infos:list):
                     tracker[-1] = new_bbox_track
                 else:
                     tracker[-1]['fill_flag'] = fill_flag
+        else:
+            tracker[-1]['fill_flag'] = fill_flag
     else:
         tracker[-1]['fill_flag'] = fill_flag
     return tracker
@@ -387,9 +507,12 @@ def link_missing_ped(ped_trackers:list):
         tracking_id = ped_tracker[-1]['info'].tracking_id
         if ped_tracker[-1]['info'].tracking_age > 4 and ped_tracker[-1]['missing_time'] == 1: #suddenly disappear
             disappear_ped_list.append(ped_tracker)
-        elif (ped_tracker[-1]['info'].tracking_age < 3) and (ped_tracker[-1]['missing_time'] == 0):
+        # elif (ped_tracker[-1]['info'].tracking_age < 3) and (ped_tracker[-1]['missing_time'] == 0):
+        elif (len(ped_tracker) < 3) and (ped_tracker[-1]['missing_time'] == 0) and (not ped_tracker[-1]['link_flag']):
             suddenly_appear_ped_list.append(ped_tracker)
     for dis_ped_tracker in disappear_ped_list:
+        # if dis_ped_tracker[-1]['info'].tracking_id == 212:
+        #     pdb.set_trace()
         position_now_y = dis_ped_tracker[-1]['info'].pos_filter[1]
         dis_ped_height = dis_ped_tracker[-1]['info'].uv_coord[3]
         link_id = -1
@@ -400,7 +523,10 @@ def link_missing_ped(ped_trackers:list):
             if (height_scale < 0.4):
                 if height_scale < min_height_scale:
                     min_height_scale = height_scale
-                    link_id = suddenly_ped_tracker[-1]['info'].tracking_id
+                    if 'inhreit_id' in suddenly_ped_tracker[-1]:
+                        if suddenly_ped_tracker[-1]['inhreit_id'] < 0 or suddenly_ped_tracker[-1]['inhreit_id'] != link_id:
+                            link_id = suddenly_ped_tracker[-1]['info'].tracking_id
+
         if link_id != -1:
             for suddenly_ped_tracker in suddenly_appear_ped_list:
                 if suddenly_ped_tracker[-1]['info'].tracking_id == link_id:
@@ -428,6 +554,34 @@ def link_missing_ped(ped_trackers:list):
 
     return link_to_publish_ped_infos
 
+def cate_in_same_main_cate(cate_list):
+    flag = True
+    cate0 = cate_list[0]
+    if cate0 > 3:
+        main_cate = 1
+    else:
+        main_cate = 0
+    for item in cate_list[1:]:
+        if item > 3:
+            cur_cate = 1
+        else:
+            cur_cate = 0
+        if cur_cate != main_cate:
+            flag = False
+    return flag
+
+def cate_is_main_cate(cate_list, cate):
+    cate0 = cate_list[0]
+    if cate0 > 3:
+        main_cate = 1
+    else:
+        main_cate = 0
+    if cate > 3:
+        cur_cate = 1
+    else:
+        cur_cate = 0
+    return cur_cate == main_cate
+
 def vote_cate(tracker:list, vote_lenth=5):
     if len(tracker) < vote_lenth: # nead enough infomation
         return tracker
@@ -435,14 +589,19 @@ def vote_cate(tracker:list, vote_lenth=5):
         return tracker
     tracking_id = tracker[-1]['info'].tracking_id
     cate_list = []
+    refine_cate_list = []
     for track in tracker:
         bbox_info = track['info']
+        refine_cate_list.append(bbox_info.cate_index)
         if track['smooth_cate'] > -1:
             cate = track['smooth_cate'] # ori cate
         else:
             cate = bbox_info.cate_index
         cate_list.append(cate)
+    rough_same_flag = cate_in_same_main_cate(cate_list)
+    same_flag = cate_in_same_main_cate(refine_cate_list)
     cate_num = {}
+    cate_time = {}
     for ii in range(len(cate_list)):
         cate = cate_list[ii]
         cate_weight = 1 + 0.5 * ii
@@ -450,15 +609,37 @@ def vote_cate(tracker:list, vote_lenth=5):
             cate_num[cate] += cate_weight
         else:
             cate_num[cate] = cate_weight
+            
+        if cate in cate_time:
+            cate_time[cate] += 1
+        else:
+            cate_time[cate] = 1
 
     max_cate = -1
     max_cate_weight = -1
+    max_time_cate = -1
+    max_cate_time = -1
     for cate in cate_num:
         if cate_num[cate] > max_cate_weight:
             max_cate = cate
             max_cate_weight = cate_num[cate]
+    
+    main_cate = refine_cate_list[0]
+    if (not same_flag or not rough_same_flag):
+        if max_cate != main_cate:
+            if cate_time[main_cate] > 2:
+                max_cate = main_cate
+    # if tracker[-1]['info'].tracking_id == 163 and (not same_flag or not rough_same_flag) and max_cate==2:
+    #     pdb.set_trace()
+    # if max_cate != cate_list[-1] and (not same_flag or not rough_same_flag):
+    #     max_cate = max_time_cate
+
+    # if tracker[-1]['info'].tracking_id == 163 and not same_flag:
+    #     pdb.set_trace()
     if max_cate != tracker[-1]['info'].cate_index:
         print('~~~~~~~~~~~~~')
+        # if tracker[-1]['info'].tracking_id == 163:
+        #     pdb.set_trace()
         print('tid: ', tracker[-1]['info'].tracking_id, 'cate switch: ', tracker[-1]['info'].cate_index, max_cate)
         for c in cate_num:
             print(c, cate_num[c])
@@ -553,7 +734,7 @@ def finetune_two_bev(bbox1_info, bbox2_info, bev_range_config): # 'x' / 'y'
         bev2_box_w = 10; bev2_box_l = 10
     else:
         bev2_box_w = bbox2_info.obstacle_width/0.1; bev2_box_l = bbox2_info.obstacle_length/0.1
-    # if (bbox1_info.tracking_id==146) and (bbox2_info.tracking_id==147):
+    # if (bbox1_info.tracking_id==2) and (bbox2_info.tracking_id==7):
     #     pdb.set_trace()
 
     bev1_cent_u = (-bbox1_info.pos_filter[1]+bev_range_w/2) / 0.1; bev1_cent_v = (bev_range_h/2 - bbox1_info.pos_filter[0]) / 0.1
@@ -622,6 +803,7 @@ def protect_each_car(bbox_infos:list, bev_range_config):
             bbox2_info = sort_bbox_infos[ii+1+jj]
             iou = bev_view_car_iou(bbox1_info, bbox2_info)
             if iou > iou_thre:
+                print(iou)
                 print(bbox1_info.tracking_id, bbox2_info.tracking_id)
                 new_bbox2_info = finetune_two_bev(bbox1_info, bbox2_info, bev_range_config)
                 sort_bbox_infos[ii+1+jj] = new_bbox2_info

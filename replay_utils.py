@@ -1,5 +1,4 @@
 import pdb
-from turtle import left
 import numpy as np
 import os
 import os.path as osp
@@ -214,7 +213,7 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), s
         tracking_id = bbox_info.tracking_id
         bbox_msg = '%d| %.2f, %.2f' % (tracking_id, position[1], position[0]) #dy, dx
         bbox_thick = 1
-        fontScale = 0.4
+        fontScale = 0.6
         if cate_index > 3: # not car, =model_cate_num+1
             color = (0, 255, 255)
             left_x = int(bev_cent_u - 5)
@@ -279,7 +278,7 @@ def draw_one_track_bev(bbox_infos, dst_tracking_id=[1], bev_range_config=(60, 40
         cate_index = bbox_info.cate_index
         bbox_msg = '%d| %.2f, %.2f' % (tracking_id, position[1], position[0]) #dy, dx
         bbox_thick = 1
-        fontScale = 0.4
+        fontScale = 0.6
         if cate_index > 3:
             color = (0, 255, 255)
             left_x = int(bev_cent_u - 5)
