@@ -21,7 +21,6 @@ def sort_rule(name):
 
 def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     publish_bbox_infos = []
-    publish_ids = []
     miss_tracker_infos = []
     miss_ped_tracker_infos = []
 
@@ -29,34 +28,13 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     for tracking_id, tracker_infos in trackers.items():
         tracker_infos = vote_cate(tracker_infos)
         tracker_infos = smooth_bev_size(tracker_infos)
-        if tracking_id == 11:
-            print('----')
-            for item in tracker_infos:
-                print(item)
-        if tracking_id == 3:
-            print('----')
-            for item in tracker_infos:
-                print(item)
         if delay_n_filter(tracker_infos):
-            publish_ids.append(tracker_infos[-1]['info'].tracking_id)
-            # publish_bbox_info = tracker_infos[-1]['info']
-            # publish_bbox_infos.append(publish_bbox_info)
-            # if publish_bbox_info.tracking_id == 7:
-            #     print('tid %d:  1st, focus %d, age %d' % (publish_bbox_info.tracking_id, tracker_infos[-1]['focus_time'], publish_bbox_info.tracking_age))
+            publish_bbox_infos.append(tracker_infos[-1]['info'])
         else:
-            if tracker_infos[-1]['info'].cate_index > 3 and is_ped_smooth(tracker_infos[-1]['info']): # not car, ped
+            if tracker_infos[-1]['info'].cate_index > 3 and is_ped_smooth(tracker_infos[-1]['info']): # not car, is ped
                 miss_ped_tracker_infos.append(tracker_infos)
             else:
                 miss_tracker_infos.append(tracker_infos)
-    for tid in publish_ids:
-        if 'inhreit_id' in trackers[tid][-1]:
-            inhireit_id = trackers[tid][-1]['inhreit_id']
-        else:
-            inhireit_id = -1
-        if inhireit_id not in publish_ids:
-            publish_bbox_infos.append(trackers[tid][-1]['info'])
-        else:
-            print( '%d inherit from %d , cannot appear in the same time, del %d' %(tid, inhireit_id, tid))
 
     # link some id swith pedestrian and so on
     link_bbox_infos = []
@@ -71,38 +49,20 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         tracking_id = item[-1]['info'].tracking_id
         if tracking_id not in link_bbox_ids:
             last_ped_info = item[-1]
-            if 'inhreit_id' in item[-1]:
-                if item[-1]['inhreit_id'] not in link_bbox_ids:
-                    if item[-1]['link_flag'] and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 1 and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
-                        link_bbox_infos.append(last_ped_info['info'])
-            else:
-                if item[-1]['link_flag'] and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 1 and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
-                    # id switch too fast, link 1 frame than swicth again
-                    link_bbox_infos.append(last_ped_info['info'])
+            if item[-1]['link_flag'] and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 0 and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
+                # id switch too fast, link 1 frame than swicth again
+                link_bbox_infos.append(last_ped_info['info'])
     publish_bbox_infos += link_bbox_infos
-    # for item in publish_bbox_infos:
-    #     tid = item.tracking_id
-    #     if tid == 7:
-    #         print('tid %d : 2nd , age: %d' % (tid, item.tracking_age))
 
     # fill some strong exist but missing bev
     fill_bbox_infos = []
     for missing_tracker in miss_tracker_infos:
         # 1. real miss detect;TODO: 2. id switch + delay, not show; 3. 1 big truck ->boom to 2
-        missing_tracker = fill_missing_car(missing_tracker, publish_bbox_infos)
+        missing_tracker, trackers = fill_missing_car(missing_tracker, publish_bbox_infos, trackers)
         if missing_tracker[-1]['fill_flag']:
-            if missing_tracker[-1]['info'].tracking_id == 2:
-                pdb.set_trace()
-            inh_flag = False
-            for tid in publish_ids:
-                if 'inhreit_id' in trackers[tid][-1]:
-                    inhireit_id = trackers[tid][-1]['inhreit_id']
-                else:
-                    inhireit_id = -1
-                if inhireit_id == missing_tracker[-1]['info'].tracking_id:
-                    inh_flag = True
-            if not inh_flag:
-                fill_bbox_infos.append(missing_tracker[-1]['info'])
+            # if missing_tracker[-1]['info'].tracking_id == 2:
+            #     pdb.set_trace()
+            fill_bbox_infos.append(missing_tracker[-1]['info'])
             print('========fill========', missing_tracker[-1]['info'].tracking_id)
     publish_bbox_infos += fill_bbox_infos
 
