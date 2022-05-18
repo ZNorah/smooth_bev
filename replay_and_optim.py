@@ -31,7 +31,7 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         if delay_n_filter(tracker_infos):
             publish_bbox_infos.append(tracker_infos[-1]['info'])
         else:
-            if tracker_infos[-1]['info'].cate_index > 3 and is_ped_smooth(tracker_infos[-1]['info']): # not car, is ped
+            if tracker_infos[-1]['info'].cate_index > 3 and is_box_show(tracker_infos[-1]['info'], bev_range_config, scale): # not car, is ped
                 miss_ped_tracker_infos.append(tracker_infos)
             else:
                 miss_tracker_infos.append(tracker_infos)
@@ -39,7 +39,7 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     # link some id swith pedestrian and so on
     link_bbox_infos = []
     link_bbox_ids = []
-    link_to_publish_ped_infos = link_missing_ped(miss_ped_tracker_infos)
+    link_to_publish_ped_infos, trackers = link_missing_ped(miss_ped_tracker_infos, trackers)
     for link_ped in link_to_publish_ped_infos:
         tracking_id = link_ped[-1]['info'].tracking_id
         trackers[tracking_id] = link_ped
@@ -49,9 +49,12 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         tracking_id = item[-1]['info'].tracking_id
         if tracking_id not in link_bbox_ids:
             last_ped_info = item[-1]
-            if item[-1]['link_flag'] and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 0 and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
-                # id switch too fast, link 1 frame than swicth again
-                link_bbox_infos.append(last_ped_info['info'])
+            if (item[-1]['link_flag']>0):
+                if item[-1]['link_flag'] in trackers:
+                    if trackers[item[-1]['link_flag']][-1]['missing_time']>0 \
+                        and last_ped_info['missing_time'] == 0 and last_ped_info['focus_time'] > 0 \
+                            and last_ped_info['info'].tracking_age > last_ped_info['focus_time']:
+                        link_bbox_infos.append(last_ped_info['info'])
     publish_bbox_infos += link_bbox_infos
 
     # fill some strong exist but missing bev
@@ -60,12 +63,19 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         # 1. real miss detect;TODO: 2. id switch + delay, not show; 3. 1 big truck ->boom to 2
         missing_tracker, trackers = fill_missing_car(missing_tracker, publish_bbox_infos, trackers)
         if missing_tracker[-1]['fill_flag']:
-            # if missing_tracker[-1]['info'].tracking_id == 2:
-            #     pdb.set_trace()
             fill_bbox_infos.append(missing_tracker[-1]['info'])
             print('========fill========', missing_tracker[-1]['info'].tracking_id)
     publish_bbox_infos += fill_bbox_infos
 
+    # for tid, tinfo in trackers.items():
+    #     if tid == 8:
+    #         print('----')
+    #         for item in tinfo:
+    #             print(item)
+    #     if tid == 9:
+    #         print('----')
+    #         for item in tinfo:
+    #             print(item)
     
     # truck_list = []
     # not_truck_list = []
@@ -78,7 +88,18 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     # publish_bbox_infos = new_truck_list + not_truck_list
 
     publish_bbox_infos = protect_each_car(publish_bbox_infos, bev_range_config)
+    
+    ##smooth hengxiang range
+    pids = []
+    for item in publish_bbox_infos:
+        pids.append(item.tracking_id)
+    new_publish_bbox_infos = []
+    for tid, tinfos in trackers.items():
+        ntinfos = straight_publish_track(tinfos)
+        if tid in pids:
+            new_publish_bbox_infos.append(ntinfos[-1]['info'])
     return publish_bbox_infos, trackers
+    # return new_publish_bbox_infos, trackers
 
 if __name__ == '__main__':
     args = parse_args()
@@ -103,7 +124,7 @@ if __name__ == '__main__':
     namelist.sort(key=sort_rule)
 
     crop_config = (0, 200, 120, 0) # desay_corp_top, desay_crop_bottom, nm_crop_top, nm_crop_bottom
-    bev_range_config=(100, 40) # h, w
+    bev_range_config=(120, 40) # h, w
     ego_car_size=(20, 40) # w, h
     scale=0.1 #meter to pixel, 1m = 10pix
 
@@ -138,7 +159,7 @@ if __name__ == '__main__':
             right_front_img = draw_all_bbox_per_img(right_front_img, right_front_bbox_infos, 'right_front', imgid, True)
             lright_rear_img = draw_all_bbox_per_img(right_rear_img, right_rear_bbox_infos, 'right_rear', imgid)
             bev_img = draw_all_bev(fusion_bbox_infos, bev_range_config, ego_car_size, scale)
-            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale)
+            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale, trackers)
 
         left_img_draw = cv2.vconcat([left_front_img, left_rear_img])
         right_img_draw = cv2.vconcat([right_front_img, right_rear_img])

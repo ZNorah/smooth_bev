@@ -85,7 +85,7 @@ def parse_track_info(obj):
 
 def process_image_info(imgdir, jsondir, filename, crop_config):
     imgpath = osp.join(imgdir, filename)
-    jsonname = filename.replace('.png', '.json')
+    jsonname = filename.replace('.jpg', '.json')
     jsonpath = osp.join(jsondir, jsonname)
 
     desay_corp_top, desay_crop_bottom, nm_crop_top, nm_crop_bottom = crop_config
@@ -105,7 +105,7 @@ def process_image_info(imgdir, jsondir, filename, crop_config):
     return img, bbox_infos
 
 def process_bev_info(jsondir, filename):
-    jsonname = filename.replace('.png', '.json')
+    jsonname = filename.replace('.jpg', '.json')
     jsonpath = osp.join(jsondir, jsonname)
     jsoninfo = get_json_info(jsonpath)
     bbox_infos = []
@@ -183,7 +183,7 @@ def draw_one_track_bbox(img, bbox_infos, camera_position, frame_id, dst_tracking
 
     return img
 
-def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), scale=0.1):
+def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), scale=0.1, trackers=None):
     color_list = gen_color_list()
     font = cv2.FONT_HERSHEY_SIMPLEX
     bev_img_h = int(bev_range_config[0] / scale)
@@ -241,6 +241,19 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), s
             else:
                 bev_show_y = int(bev_cent_v+bev_box_l/2)
             cv2.putText(bev_img, bbox_msg, (bev_show_x, bev_show_y), font, fontScale, (255,255,255), thickness=bbox_thick, lineType=cv2.LINE_AA)
+        if trackers is not None:
+            #paint tracker line
+            tracker_infos = trackers[tracking_id]
+            points = []
+            for ii, tinfo in enumerate(tracker_infos):
+                point_color = (255, int(30*ii), int(30*ii))
+                tbbox = tinfo['info']
+                position = tbbox.pos_filter
+                bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
+                bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
+                cv2.circle(bev_img, (int(bev_cent_u), int(bev_cent_v)), 5, point_color, -1)
+                points.append((int(bev_cent_u), int(bev_cent_v)))
+
     bev_img = cv2.resize(bev_img, (int(512*bev_img_w/bev_img_h), 512)) # (400,600) -> (xxx, 512) / (400,800) ->(xxx,512)
     return bev_img
 
