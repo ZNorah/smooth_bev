@@ -1,8 +1,5 @@
-import os
-import os.path as osp
-import cv2
 import argparse
-
+from cmath import pi
 from replay_utils import *
 from optim_utils import *
 
@@ -19,11 +16,10 @@ def parse_args():
 def sort_rule(name):
     return int(name.split('.')[0])
 
-def filter_publish_bbox_infos(trackers:dict, bev_range_config):
+def filter_publish_bbox_infos(trackers:dict, bev_range_config, scale=0.1):
     publish_bbox_infos = []
     miss_tracker_infos = []
     miss_ped_tracker_infos = []
-
     # actually publish bev
     for tracking_id, tracker_infos in trackers.items():
         tracker_infos = vote_cate(tracker_infos)
@@ -31,11 +27,11 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         if delay_n_filter(tracker_infos):
             publish_bbox_infos.append(tracker_infos[-1]['info'])
         else:
-            if tracker_infos[-1]['info'].cate_index > 3 and is_box_show(tracker_infos[-1]['info'], bev_range_config, scale): # not car, is ped
-                miss_ped_tracker_infos.append(tracker_infos)
-            else:
-                miss_tracker_infos.append(tracker_infos)
-
+            if is_box_show(tracker_infos[-1]['info'], bev_range_config, scale):
+                if tracker_infos[-1]['info'].cate_index > 3: # not car, is ped
+                    miss_ped_tracker_infos.append(tracker_infos)
+                else:
+                    miss_tracker_infos.append(tracker_infos)
     # link some id swith pedestrian and so on
     link_bbox_infos = []
     link_bbox_ids = []
@@ -58,8 +54,34 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     publish_bbox_infos += link_bbox_infos
 
     # fill some strong exist but missing bev
+    pids = []
+    for item in publish_bbox_infos:
+        pids.append(item.tracking_id)
+    new_miss_tracker_infos = []
+    for miss_tracker in miss_tracker_infos:
+        mid = miss_tracker[-1]['info'].tracking_id
+        # if mid == 203:
+        #     pdb.set_trace()
+        mfocus = miss_tracker[-1]['focus_time']
+        mmiss = miss_tracker[-1]['missing_time']
+        mlink = miss_tracker[-1]['link_flag']
+        if mfocus > 0 and (mlink >0 and mlink not in pids):
+            # print(mmiss)
+            publish_bbox_infos.append(miss_tracker[-1]['info'])
+            trackers[mid][-1]['link_flag'] = -22
+            if mlink in trackers:
+                trackers[mlink][-1]['link_flag'] = -22
+            print('republish %d' %mid)
+            if mlink in trackers and len(trackers[mlink]) > 1:
+                trackers[mid][-1]['focus_time'] = trackers[mlink][-2]['focus_time'] + 1
+        # elif mfocus > 2 and mmiss < 4 and len(trackers[mid])>=max_length_:
+        #     publish_bbox_infos.append(miss_tracker[-1]['info'])
+        #     print('republish %d' %mid)
+        else:
+            new_miss_tracker_infos.append(miss_tracker)
     fill_bbox_infos = []
-    for missing_tracker in miss_tracker_infos:
+    # for missing_tracker in miss_tracker_infos:
+    for missing_tracker in new_miss_tracker_infos:
         # 1. real miss detect;TODO: 2. id switch + delay, not show; 3. 1 big truck ->boom to 2
         missing_tracker, trackers = fill_missing_car(missing_tracker, publish_bbox_infos, trackers)
         if missing_tracker[-1]['fill_flag']:
@@ -68,26 +90,14 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
     publish_bbox_infos += fill_bbox_infos
 
     # for tid, tinfo in trackers.items():
-    #     if tid == 8:
+    #     if tid == 61:
     #         print('----')
     #         for item in tinfo:
     #             print(item)
-    #     if tid == 9:
+    #     if tid == 33:
     #         print('----')
     #         for item in tinfo:
     #             print(item)
-    
-    # truck_list = []
-    # not_truck_list = []
-    # for item in publish_bbox_infos:
-    #     if is_left_truck(item):
-    #         truck_list.append(item)
-    #     else:
-    #         not_truck_list.append(item)
-    # new_truck_list, trackers = pair_publish_left_truck(truck_list, trackers)
-    # publish_bbox_infos = new_truck_list + not_truck_list
-
-    publish_bbox_infos = protect_each_car(publish_bbox_infos, bev_range_config)
     
     ##smooth hengxiang range
     pids = []
@@ -95,11 +105,36 @@ def filter_publish_bbox_infos(trackers:dict, bev_range_config):
         pids.append(item.tracking_id)
     new_publish_bbox_infos = []
     for tid, tinfos in trackers.items():
-        ntinfos = straight_publish_track(tinfos)
+        ntinfos = smooth_publish_track(tinfos)
+        ntinfos = smooth_straight_car_by_track(tinfos)
         if tid in pids:
             new_publish_bbox_infos.append(ntinfos[-1]['info'])
-    return publish_bbox_infos, trackers
-    # return new_publish_bbox_infos, trackers
+    # refine angle big car with new_publish_bbox_infos
+    new_publish_bbox_infos, trackers = refine_slant_vehicle(new_publish_bbox_infos, trackers)
+
+    # publish_bbox_infos = protect_each_car(publish_bbox_infos, bev_range_config, trackers)
+    publish_bbox_infos = protect_each_car(new_publish_bbox_infos, bev_range_config, trackers)
+    new_publish_bbox_infos = []
+    pids = []
+    for item in publish_bbox_infos:
+        pids.append(item.tracking_id)
+    # print(pids)
+    for pinfo in publish_bbox_infos:
+        tid = pinfo.tracking_id
+        bbox_show_flag = is_box_show(trackers[tid][-1]['info'], bev_range_config)
+        if tid==61:
+            print(bbox_show_flag)
+        if bbox_show_flag:
+            new_publish_bbox_infos.append(pinfo)
+        else:
+            trackers[tid][-1]['focus_time'] = 0
+            trackers[tid][-1]['missing_time'] += 1
+    # if 61 in pids:
+    #     for pinfo in new_publish_bbox_infos:
+    #         print(pinfo)
+
+    # return publish_bbox_infos, trackers
+    return new_publish_bbox_infos, trackers
 
 if __name__ == '__main__':
     args = parse_args()
@@ -127,6 +162,8 @@ if __name__ == '__main__':
     bev_range_config=(120, 40) # h, w
     ego_car_size=(20, 40) # w, h
     scale=0.1 #meter to pixel, 1m = 10pix
+    max_length_ = 8
+    vanish_length_ = 8
 
     cv2.namedWindow('Replay')
     pause = True
@@ -143,8 +180,8 @@ if __name__ == '__main__':
         fusion_bbox_infos = process_bev_info(fusion_jsondir, imgname)
 
         ####keep trackers map
-        trackers = update_trackers(trackers, fusion_bbox_infos, bev_range_config, scale)
-        publish_bbox_infos, trackers = filter_publish_bbox_infos(trackers, bev_range_config)
+        trackers = update_trackers(trackers, fusion_bbox_infos, bev_range_config, scale, max_length_, vanish_length_)
+        publish_bbox_infos, trackers = filter_publish_bbox_infos(trackers, bev_range_config, scale)
 
         if len(dst_tracking_id_list):
             left_front_img = draw_one_track_bbox(left_front_img, left_front_bbox_infos, 'left_front', imgid, dst_tracking_id_list)
@@ -159,11 +196,11 @@ if __name__ == '__main__':
             right_front_img = draw_all_bbox_per_img(right_front_img, right_front_bbox_infos, 'right_front', imgid, True)
             lright_rear_img = draw_all_bbox_per_img(right_rear_img, right_rear_bbox_infos, 'right_rear', imgid)
             bev_img = draw_all_bev(fusion_bbox_infos, bev_range_config, ego_car_size, scale)
-            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale, trackers)
+            # filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale, trackers)
+            filter_bev_img = draw_all_bev(publish_bbox_infos, bev_range_config, ego_car_size, scale)
 
         left_img_draw = cv2.vconcat([left_front_img, left_rear_img])
         right_img_draw = cv2.vconcat([right_front_img, right_rear_img])
-        # draw_img = cv2.hconcat([left_img_draw, right_img_draw, bev_img])
         draw_img = cv2.hconcat([left_img_draw, right_img_draw, filter_bev_img, bev_img])
 
         if save_flag:

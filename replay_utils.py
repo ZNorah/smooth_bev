@@ -11,7 +11,8 @@ from collections import namedtuple
 
 BBox = namedtuple('BBox', ['cate', 'cate_index', 
                             'tracking_id', 'tracking_age', 
-                            'uv_coord', 'pos_filter', 'obstacle_width', 'obstacle_length'])
+                            'uv_coord', 'pos_filter', 'obstacle_width', 'obstacle_length', 
+                            'alpha', 'heading_yaw'])
 
 def gendir(path):
     if not osp.exists(path):
@@ -77,10 +78,14 @@ def parse_track_info(obj):
     position = [pos_x, pos_y]
     obstacle_width = obj['obstacle_width']
     obstacle_length = obj['obstacle_length']
+    info3d = obj['bbox3d']
+    alpha = info3d['obstacle_alpha']
+    heading_yaw = info3d['obstacle_heading_yaw']
     bbox_info = BBox(cate=cate_name, cate_index=cate_index, 
                         tracking_id=obj_id, tracking_age=obj_age, 
                         uv_coord=uvcoord, pos_filter=position, 
-                        obstacle_width=obstacle_width, obstacle_length=obstacle_length)
+                        obstacle_width=obstacle_width, obstacle_length=obstacle_length,
+                        alpha=alpha, heading_yaw=heading_yaw)
     return bbox_info
 
 def process_image_info(imgdir, jsondir, filename, crop_config):
@@ -226,12 +231,21 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), s
             right_x = int(bev_cent_u + bev_box_w / 2)
             left_y = int(bev_cent_v - bev_box_l / 2)
             right_y = int(bev_cent_v + bev_box_l / 2)
-        if (0<bev_cent_u<bev_img_w and 0<bev_cent_v<bev_img_h):
-            cv2.rectangle(bev_img, (left_x, left_y), (right_x, right_y), color, -1)
-            cv2.line(bev_img, (left_x, left_y), (left_x, right_y), (255,255,255), 1)
-            cv2.line(bev_img, (left_x, right_y), (right_x, right_y), (255,255,255), 1)
-            cv2.line(bev_img, (right_x, right_y), (right_x, left_y), (255,255,255), 1)
-            cv2.line(bev_img, (right_x, left_y), (left_x, left_y), (255,255,255), 1)
+        if (0<bev_cent_u<bev_img_w and 0<bev_cent_v<bev_img_h and not(left_x<0 or left_y<0 or right_x>bev_img_w or right_y>bev_img_h)):
+            car_w = right_x - left_x
+            car_h = right_y - left_y
+            target_car = np.zeros((car_h, car_w, 3), np.uint8)
+            target_car[:,:,0].fill(color[0])
+            target_car[:,:,1].fill(color[1])
+            target_car[:,:,2].fill(color[2])
+            center_point = (int((right_x-left_x)/2), int((right_y-left_y)/2))
+            rot_angle = bbox_info.heading_yaw * 180 / 3.14
+            # print(tracking_id, rot_angle)
+            rot_mat = cv2.getRotationMatrix2D(center_point, rot_angle, 1.0)
+            cv2.line(target_car, center_point, (int((right_x-left_x)/2), 0), (255,255,255), 2)
+            targer_car_affine = cv2.warpAffine(target_car, rot_mat, (int(right_x-left_x), int(right_y-left_y)), borderValue=(50,50,50))
+            bev_img[left_y:right_y, left_x:right_x] = targer_car_affine
+            
             if bev_cent_u > bev_img_w/2:
                 bev_show_x = int(bev_cent_u-bev_box_w/2)
             else:
@@ -241,18 +255,16 @@ def draw_all_bev(bbox_infos, bev_range_config=(60, 40), ego_car_size=(20, 40), s
             else:
                 bev_show_y = int(bev_cent_v+bev_box_l/2)
             cv2.putText(bev_img, bbox_msg, (bev_show_x, bev_show_y), font, fontScale, (255,255,255), thickness=bbox_thick, lineType=cv2.LINE_AA)
-        if trackers is not None:
-            #paint tracker line
-            tracker_infos = trackers[tracking_id]
-            points = []
-            for ii, tinfo in enumerate(tracker_infos):
-                point_color = (255, int(30*ii), int(30*ii))
-                tbbox = tinfo['info']
-                position = tbbox.pos_filter
-                bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
-                bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
-                cv2.circle(bev_img, (int(bev_cent_u), int(bev_cent_v)), 5, point_color, -1)
-                points.append((int(bev_cent_u), int(bev_cent_v)))
+            if trackers is not None:
+                #paint tracker line
+                tracker_infos = trackers[tracking_id]
+                for ii, tinfo in enumerate(tracker_infos):
+                    point_color = (255, int(30*ii), int(30*ii))
+                    tbbox = tinfo['info']
+                    position = tbbox.pos_filter
+                    bev_cent_u = (-position[1]+bev_range_config[1]/2) / scale
+                    bev_cent_v = (bev_range_config[0]/2 - position[0]) / scale
+                    cv2.circle(bev_img, (int(bev_cent_u), int(bev_cent_v)), 5, point_color, -1)
 
     bev_img = cv2.resize(bev_img, (int(512*bev_img_w/bev_img_h), 512)) # (400,600) -> (xxx, 512) / (400,800) ->(xxx,512)
     return bev_img
